@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>UNESR · Portafolio PEM</title>
+  <style>
+    * { box-sizing:border-box; }
+    body { margin:0; background:#f3f6fa; color:#18283b; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
+    .top {background:#132e50;color:#fff;padding:24px 18px;border-bottom:4px solid #1ca5a1;}
+    .top > div {max-width:760px;margin:auto;}
+    .badge {letter-spacing:.11em;text-transform:uppercase;font-size:12px;font-weight:750;color:#bfe3ed;}
+    h1 {font-size:clamp(23px,4vw,31px);margin:8px 0 6px;line-height:1.2;}
+    .top p {margin:0;color:#d6e4ed;}
+    main {max-width:760px;margin:28px auto;padding:0 16px 40px;}
+    .box {background:#fff;border:1px solid #dfe7f0;border-radius:14px;padding:25px;margin-bottom:18px;box-shadow:0 6px 25px #182f4b12;}
+    h2 {margin:0 0 14px;font-size:20px;color:#153c65;}
+    label {display:block;font-size:14px;font-weight:650;margin:14px 0 6px;}
+    input {width:100%;padding:12px;border:1px solid #aabccf;border-radius:8px;font:inherit;background:#fff;color:#18283b;}
+    input:focus {outline:3px solid #d2edeb;border-color:#168a8a;}
+    button {display:inline-block;background:#0d6e76;border:0;color:#fff;font:inherit;font-weight:700;border-radius:8px;padding:12px 18px;margin-top:15px;cursor:pointer;}
+    button:disabled {opacity:.55;cursor:wait;}
+    button.secondary {background:#163c65;}
+    .muted {color:#617084;font-size:13px;line-height:1.5;}
+    .status {border-radius:8px;padding:13px;margin:15px 0;display:none;}
+    .status.error {display:block;background:#fff0ed;color:#923b2b;border:1px solid #f5c6ba;}
+    .status.ok {display:block;background:#e7f5ef;color:#176448;border:1px solid #a1d8c0;}
+    .status.wait {display:block;background:#fdf6e3;color:#755511;border:1px solid #ebdcad;}
+    #contenido {display:none;}
+    .resumen {border-left:4px solid #19a6a2;padding-left:12px;margin:16px 0;}
+    footer {color:#657689;text-align:center;font-size:12px;line-height:1.6;padding:0 18px 20px;}
+  </style>
+</head>
+<body>
+  <header class="top"><div>
+    <div class="badge">Universidad Nacional Experimental Simón Rodríguez</div>
+    <h1>Portafolio razonado · Medicina veterinaria</h1>
+    <p>Pensamiento Estratégico Matemático (HPNF04PEM) · Asignación 2 · 15 %</p>
+  </div></header>
+  <main>
+    <section class="box">
+      <h2>Acceder a mi asignación</h2>
+      <p class="muted">Utilice su cédula y la clave privada que recibió por correo electrónico. No comparta sus credenciales.</p>
+      <form id="ingreso" onsubmit="entrar(event)">
+        <label for="cedula">Cédula</label><input type="text" id="cedula" inputmode="numeric" autocomplete="username" required placeholder="Solo números">
+        <label for="clave">Clave individual</label><input type="password" id="clave" autocomplete="current-password" required placeholder="16 caracteres">
+        <button type="submit" id="entrarBtn">Consultar y descargar guía</button>
+      </form>
+      <div id="mensaje" class="status" aria-live="polite"></div>
+    </section>
+    <section class="box" id="contenido">
+      <h2>Mi portafolio asignado</h2>
+      <div class="resumen"><strong id="nombre"></strong><br><span id="codigo"></span><br><span id="estado"></span></div>
+      <button type="button" class="secondary" id="pdfBtn" onclick="descargarPDF()">Descargar mi guía en PDF</button>
+      <p class="muted">La guía incluye cinco problemas únicos con su código. Resuélvalos con procedimientos, operaciones, unidades, comprobación e interpretación administrativa.</p>
+      <hr style="border:0;border-top:1px solid #dae3eb;margin:23px 0">
+      <h2>Entregar respuestas</h2>
+      <form id="entrega" onsubmit="subir(event,this)">
+        <input type="hidden" name="cedula" id="cedulaForm">
+        <input type="hidden" name="clave" id="claveForm">
+        <label for="archivo">Portafolio resuelto (un solo PDF; máximo 5 MB)</label>
+        <input type="file" name="archivo" id="archivo" accept="application/pdf,.pdf" required>
+        <button type="submit" id="subirBtn">Enviar mi PDF</button>
+      </form>
+      <p class="muted">Al reemplazar un archivo entregado, la nueva versión sustituirá a la anterior siempre que la entrega no haya sido calificada y la fecha de recepción continúe abierta.</p>
+      <div id="envioMensaje" class="status" aria-live="polite"></div>
+    </section>
+  </main>
+  <footer>UNESR · Facilitador: Steawart Jiménez Rivas<br>Los archivos y las calificaciones individuales se almacenan en un espacio privado del docente.</footer>
+  <script>
+    let pdfB64='', nombrePdf='';
+    function mensaje(id,texto,tipo){const x=document.getElementById(id); x.className='status '+tipo;x.textContent=texto;}
+    function ocupado(id,b){document.getElementById(id).disabled=b;}
+    async function api(accion,payload){
+      const response=await fetch('/api/'+accion,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+        cache:'no-store',
+        credentials:'same-origin'
+      });
+      let body;
+      try{body=await response.json();}catch(_){throw new Error('Respuesta inválida del servicio.');}
+      if(!response.ok || !body.ok) throw new Error(body.error || 'No fue posible completar la operación.');
+      return body.data;
+    }
+    async function entrar(e){
+      e.preventDefault();
+      ocupado('entrarBtn',true);mensaje('mensaje','Validando acceso…','wait');
+      const cedula=document.getElementById('cedula').value.replace(/\D/g,'');
+      const clave=document.getElementById('clave').value.trim().toUpperCase();
+      try{
+        const data=await api('login',{cedula,clave});
+        pdfB64=data.archivoBase64;
+        nombrePdf=data.nombrePDF;
+        document.getElementById('nombre').textContent=data.nombre;
+        document.getElementById('codigo').textContent='Código: '+data.codigo;
+        document.getElementById('estado').textContent='Estado: '+data.estado+(data.fechaEntrega?' · Última entrega: '+data.fechaEntrega:'');
+        document.getElementById('cedulaForm').value=cedula;
+        document.getElementById('claveForm').value=clave;
+        document.getElementById('contenido').style.display='block';
+        mensaje('mensaje','Acceso autorizado. Puede descargar la guía y cargar sus respuestas.','ok');
+        document.getElementById('contenido').scrollIntoView({behavior:'smooth'});
+      }catch(err){
+        document.getElementById('contenido').style.display='none';pdfB64='';
+        mensaje('mensaje',err.message || 'No fue posible ingresar.','error');
+      }finally{ocupado('entrarBtn',false);}
+    }
+    function descargarPDF(){
+      if(!pdfB64)return;
+      const bytes=atob(pdfB64), grupos=[];
+      for(let i=0;i<bytes.length;i+=8192){
+        const s=bytes.slice(i,i+8192),a=new Uint8Array(s.length);
+        for(let j=0;j<s.length;j++)a[j]=s.charCodeAt(j);
+        grupos.push(a);
+      }
+      const url=URL.createObjectURL(new Blob(grupos,{type:'application/pdf'}));
+      const a=document.createElement('a');a.href=url;a.download=nombrePdf;a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),15000);
+    }
+    async function codificarArchivo(file){
+      const bytes=new Uint8Array(await file.arrayBuffer());
+      const fragmentos=[];
+      for(let i=0;i<bytes.length;i+=16384){
+        const trozo=bytes.subarray(i,i+16384);
+        let texto='';for(let j=0;j<trozo.length;j++)texto+=String.fromCharCode(trozo[j]);
+        fragmentos.push(texto);
+      }
+      return btoa(fragmentos.join(''));
+    }
+    async function subir(e,form){
+      e.preventDefault();
+      const file=form.archivo.files[0];
+      if(!file || !file.name.toLowerCase().endsWith('.pdf')){mensaje('envioMensaje','Seleccione un archivo PDF.','error');return;}
+      if(file.size>5*1024*1024){mensaje('envioMensaje','Archivo demasiado grande (máximo 5 MB).','error');return;}
+      ocupado('subirBtn',true);mensaje('envioMensaje','Cargando y verificando el PDF…','wait');
+      try{
+        const archivoBase64=await codificarArchivo(file);
+        const data=await api('upload',{
+          cedula:document.getElementById('cedulaForm').value,
+          clave:document.getElementById('claveForm').value,
+          nombreArchivo:file.name,
+          archivoBase64
+        });
+        mensaje('envioMensaje',data.mensaje,'ok');
+        document.getElementById('estado').textContent='Estado: ENTREGADA';
+        document.getElementById('archivo').value='';
+      }catch(err){
+        mensaje('envioMensaje',err.message || 'No se pudo completar la entrega.','error');
+      }finally{ocupado('subirBtn',false);}
+    }
+  </script>
+</body>
+</html>
